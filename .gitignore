@@ -1,1 +1,16 @@
 papers/
+.venv/
+__pycache__/
+*.pyc
+_runs/
+Stage*/results/
+Stage*/figs/
+data/raw/
+data/processed/
+Stage*/_quick/
+.ipynb_checkpoints/
+
+
+Stage*/config.env
+Stage*/requirements.txt
+Stage*/run.sh
