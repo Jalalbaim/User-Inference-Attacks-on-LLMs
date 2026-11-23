@@ -40,8 +40,9 @@ from scipy.special import ndtr, ndtri
 from scipy.stats import ncx2, rankdata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RES = os.path.join(HERE, "results")
-FIG = os.path.join(HERE, "figs")
+_OUT = os.environ.get("UIA_OUT_DIR", HERE)          # set by kaggle/header.sh; defaults to Stage0/
+RES = os.path.join(_OUT, "results")
+FIG = os.path.join(_OUT, "figs")
 
 
 # =============================================================================
@@ -804,7 +805,12 @@ def main():
     q = args.quick
     todo = set(args.what)
     if "all" in todo:
-        todo = {"E1", "E2a", "E2b", "E2c", "E3b", "E5", "E6", "illus", "figs", "numbers"}
+        todo = {"E1", "E2a", "E2b", "E2c", "E3b", "E5", "E6", "illus"}
+        # ui_figs.py / make_numbers.py belong to the working note and are not in this repo;
+        # only run them if present. Stage 0 figures come from stage0_checks.py.
+        for extra, mod in (("figs", "ui_figs"), ("numbers", "make_numbers")):
+            if os.path.exists(os.path.join(HERE, mod + ".py")):
+                todo.add(extra)
     if "selftest" in todo:
         selftest()
     if "E1" in todo:
