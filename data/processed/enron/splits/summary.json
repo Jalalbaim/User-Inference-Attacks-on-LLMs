@@ -1,0 +1,202 @@
+{
+ "params": {
+  "heldout": 32,
+  "val_frac": 0.05,
+  "val_min": 4,
+  "seeds": 10,
+  "doc_seed": 0,
+  "half_seed": 0
+ },
+ "users": 175,
+ "docs": 101817,
+ "docs_by_role": {
+  "heldout": 5600,
+  "val": 4810,
+  "train": 91407
+ },
+ "users_by_half": {
+  "FIT": 87,
+  "EVAL": 88
+ },
+ "val_docs_per_user": [
+  6,
+  207
+ ],
+ "train_docs_per_user_min_med_max": [
+  114,
+  294,
+  3925
+ ],
+ "per_seed": [
+  {
+   "seed": 0,
+   "members": 82,
+   "nonmembers": 93,
+   "members_FIT": 45,
+   "nonmembers_FIT": 42,
+   "members_EVAL": 37,
+   "nonmembers_EVAL": 51,
+   "train_docs": 42946,
+   "alpha_min_med_max": [
+    0.0026544963442462627,
+    0.0059376891910771674,
+    0.0913938434312858
+   ],
+   "nonmember_heldout_docs_verbatim_in_member_train": 8,
+   "nonmember_users_affected": 5
+  },
+  {
+   "seed": 1,
+   "members": 83,
+   "nonmembers": 92,
+   "members_FIT": 42,
+   "nonmembers_FIT": 45,
+   "members_EVAL": 41,
+   "nonmembers_EVAL": 47,
+   "train_docs": 47281,
+   "alpha_min_med_max": [
+    0.00253801738541909,
+    0.006641145491846619,
+    0.07694422706795541
+   ],
+   "nonmember_heldout_docs_verbatim_in_member_train": 7,
+   "nonmember_users_affected": 6
+  },
+  {
+   "seed": 2,
+   "members": 83,
+   "nonmembers": 92,
+   "members_FIT": 37,
+   "nonmembers_FIT": 50,
+   "members_EVAL": 46,
+   "nonmembers_EVAL": 42,
+   "train_docs": 39133,
+   "alpha_min_med_max": [
+    0.0029131423606674673,
+    0.007512840824879258,
+    0.08532440651112871
+   ],
+   "nonmember_heldout_docs_verbatim_in_member_train": 5,
+   "nonmember_users_affected": 2
+  },
+  {
+   "seed": 3,
+   "members": 90,
+   "nonmembers": 85,
+   "members_FIT": 40,
+   "nonmembers_FIT": 47,
+   "members_EVAL": 50,
+   "nonmembers_EVAL": 38,
+   "train_docs": 45535,
+   "alpha_min_med_max": [
+    0.0025035686834303282,
+    0.006302843966179862,
+    0.0798945865817503
+   ],
+   "nonmember_heldout_docs_verbatim_in_member_train": 13,
+   "nonmember_users_affected": 5
+  },
+  {
+   "seed": 4,
+   "members": 92,
+   "nonmembers": 83,
+   "members_FIT": 48,
+   "nonmembers_FIT": 39,
+   "members_EVAL": 44,
+   "nonmembers_EVAL": 44,
+   "train_docs": 54788,
+   "alpha_min_med_max": [
+    0.002080747608965467,
+    0.0059045776447397245,
+    0.07163977513324085
+   ],
+   "nonmember_heldout_docs_verbatim_in_member_train": 20,
+   "nonmember_users_affected": 5
+  },
+  {
+   "seed": 5,
+   "members": 85,
+   "nonmembers": 90,
+   "members_FIT": 38,
+   "nonmembers_FIT": 49,
+   "members_EVAL": 47,
+   "nonmembers_EVAL": 41,
+   "train_docs": 44755,
+   "alpha_min_med_max": [
+    0.0026365769187800246,
+    0.0059881577477376826,
+    0.0876996983577254
+   ],
+   "nonmember_heldout_docs_verbatim_in_member_train": 3,
+   "nonmember_users_affected": 2
+  },
+  {
+   "seed": 6,
+   "members": 78,
+   "nonmembers": 97,
+   "members_FIT": 38,
+   "nonmembers_FIT": 49,
+   "members_EVAL": 40,
+   "nonmembers_EVAL": 48,
+   "train_docs": 40549,
+   "alpha_min_med_max": [
+    0.002811413351747269,
+    0.007447779230067326,
+    0.09679646847024588
+   ],
+   "nonmember_heldout_docs_verbatim_in_member_train": 4,
+   "nonmember_users_affected": 3
+  },
+  {
+   "seed": 7,
+   "members": 100,
+   "nonmembers": 75,
+   "members_FIT": 52,
+   "nonmembers_FIT": 35,
+   "members_EVAL": 48,
+   "nonmembers_EVAL": 40,
+   "train_docs": 54041,
+   "alpha_min_med_max": [
+    0.0021095094465313374,
+    0.005690124164985844,
+    0.06731925760071057
+   ],
+   "nonmember_heldout_docs_verbatim_in_member_train": 7,
+   "nonmember_users_affected": 4
+  },
+  {
+   "seed": 8,
+   "members": 70,
+   "nonmembers": 105,
+   "members_FIT": 34,
+   "nonmembers_FIT": 53,
+   "members_EVAL": 36,
+   "nonmembers_EVAL": 52,
+   "train_docs": 33052,
+   "alpha_min_med_max": [
+    0.0036003872685465327,
+    0.008532010165799346,
+    0.08066077695752148
+   ],
+   "nonmember_heldout_docs_verbatim_in_member_train": 13,
+   "nonmember_users_affected": 5
+  },
+  {
+   "seed": 9,
+   "members": 89,
+   "nonmembers": 86,
+   "members_FIT": 40,
+   "nonmembers_FIT": 47,
+   "members_EVAL": 49,
+   "nonmembers_EVAL": 39,
+   "train_docs": 48314,
+   "alpha_min_med_max": [
+    0.002442356252845966,
+    0.006085192697768763,
+    0.0752990851513019
+   ],
+   "nonmember_heldout_docs_verbatim_in_member_train": 12,
+   "nonmember_users_affected": 3
+  }
+ ]
+}

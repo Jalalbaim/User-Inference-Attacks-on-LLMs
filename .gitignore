@@ -6,7 +6,10 @@ _runs/
 Stage*/results/
 Stage*/figs/
 data/raw/
-data/processed/
+data/processed/*
+!data/processed/enron/
+data/processed/enron/*
+!data/processed/enron/splits/
 Stage*/_quick/
 .ipynb_checkpoints/
 
@@ -14,3 +17,5 @@ Stage*/_quick/
 Stage*/config.env
 Stage*/requirements.txt
 Stage*/run.sh
+
+docs/
