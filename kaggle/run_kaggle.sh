@@ -40,6 +40,9 @@ else
     echo "[run_kaggle] code at $REPO ($(git -C "$REPO" rev-parse --short HEAD))"
 fi
 
+# Data committed in the repo (data/processed/...) is read from this checkout, not packed into the build.
+export UIA_REPO_DIR="$REPO"
+
 # 2. Assemble the single runnable script, 3. run it (overrides passed through).
 if [ -d /kaggle/working ]; then WORK=/kaggle/working; else WORK="${UIA_WORK:-$PWD/_runs}"; fi
 mkdir -p "$WORK/build"

@@ -6,7 +6,7 @@ UIA_END=$(date +%s)
 UIA_RUNTIME=$(( UIA_END - UIA_START ))
 case "$UIA_RC" in
     0)   UIA_STATUS=ok ;;
-    124) UIA_STATUS=time_budget_reached ;;
+    124|75) UIA_STATUS=time_budget_reached ;;   # 124: killed by timeout; 75: stage stopped itself to resume
     *)   UIA_STATUS=failed ;;
 esac
 
