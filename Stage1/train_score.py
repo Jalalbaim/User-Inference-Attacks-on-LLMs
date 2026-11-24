@@ -2,7 +2,7 @@
 Stage 1 (plan section 4, row 1; Steps A-C): fine-tune GPT-Neo 125M on one seed's members, keep the epoch with the
 best member-validation loss, then score every held-out document with that model and the pretrained reference.
 
-Settings agreed with the user (Kandpal et al.): batch 8, lr 5e-5, AdamW, linear decay, no warmup, 10 full epochs,
+Settings agreed with the user (Kandpal et al.): batch 8, lr 5e-5, AdamW, linear decay, no warmup, all epochs run (4 from 2026-11-24; the seed-0 pilot used 10),
 best epoch by validation loss (no early stopping), fp16 mixed precision on GPU, 128 tokens per document.
 
 Runs:
@@ -12,7 +12,7 @@ Runs:
 
 Checkpoints (resume across Kaggle sessions): <ckpt>/<run>_s<seed>/
   last.pt         model + optimizer + scheduler + scaler + history, written after every epoch
-  best/           best-epoch weights (save_pretrained); after scoring, kept in fp16 (for Stage 2)
+  best/           best-epoch weights (save_pretrained); after scoring, kept in fp16 unless --keep-fp32
   scores.csv.gz   the per-document score table of this run/seed; DONE marks a finished seed
 Reference scores (pretrained model, seed-independent) are cached in <ckpt>/ref_scores_<len>.csv.gz.
 
@@ -86,7 +86,7 @@ def run_seed(a, seed, docs, users, tok, device, ref_cache):
     full_train = sum(1 for d in docs if d["role"] == "train" and d["user"] in mem)
     if a.smoke:   # a few users, a few docs each: exercises every code path in minutes
         rng = random.Random(seed)
-        keep = set(rng.sample(sorted(mem), 3)) | set(rng.sample(sorted(set(users) - mem), 3))
+        keep = set(rng.sample(sorted(mem), a.smoke_users)) | set(rng.sample(sorted(set(users) - mem), a.smoke_users))
         docs = [d for d in docs if d["user"] in keep]
         mem = mem & keep
     train = [d for d in docs if d["role"] == "train" and d["user"] in mem]
@@ -214,7 +214,7 @@ def run_seed(a, seed, docs, users, tok, device, ref_cache):
     # keep only what later stages need: best weights in fp16; drop the optimizer state
     if not a.keep_last:
         os.remove(last)
-    if device.type == "cuda" and not a.tiny:
+    if device.type == "cuda" and not a.tiny and not a.keep_fp32:
         model.half().save_pretrained(os.path.join(cdir, "best"))
     open(done, "w").write(time.strftime("%Y-%m-%dT%H:%M:%S"))
     gap = df.groupby("trained").s.mean()
@@ -232,14 +232,17 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--ckpt", required=True)
     ap.add_argument("--model", default="EleutherAI/gpt-neo-125m")
-    ap.add_argument("--epochs", type=int, default=10)
+    ap.add_argument("--epochs", type=int, default=4)
     ap.add_argument("--bs", type=int, default=8)
     ap.add_argument("--lr", type=float, default=5e-5)
     ap.add_argument("--max-len", type=int, default=128)
     ap.add_argument("--fp32", action="store_true", help="disable fp16 mixed precision")
     ap.add_argument("--keep-last", action="store_true", help="keep last.pt (optimizer) after a seed finishes")
+    ap.add_argument("--keep-fp32", action="store_true",
+                    help="keep best/ in fp32 (Stage 2: S_cat must use the exact weights that produced the score table)")
     ap.add_argument("--smoke", action="store_true", help="6 users, few docs and steps; prints a runtime estimate")
     ap.add_argument("--smoke-steps", type=int, default=60)
+    ap.add_argument("--smoke-users", type=int, default=3, help="smoke: users per class")
     ap.add_argument("--smoke-train-docs", type=int, default=600)
     ap.add_argument("--tiny", action="store_true", help="random 2-layer model (local CPU test only)")
     a = ap.parse_args()

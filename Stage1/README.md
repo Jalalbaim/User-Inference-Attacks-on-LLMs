@@ -1,5 +1,8 @@
 # Stage 1: reproduce Kandpal et al. on Enron (GPT-Neo 125M)
 
+**Status: CLOSED (2026-11-24), gate passed.** Seed 0: T̂ AUROC 0.881 [0.828, 0.928] at m = 32 (Kandpal: 0.873); DKW certificate +0.350.
+Null model: AUROC 0.559 [0.432, 0.678], certificate −0.256. Details are in the notes cell of `stage1.ipynb`.
+
 **Plan:** `docs/experiment_plan_enron_gptneo125m.md`, section 4 row 1 (Steps A–C). Needs a GPU (Kaggle T4).
 **Gate:** T̂ AUROC near Kandpal's 0.873, and the null model ≈ chance. Otherwise debug; do not proceed.
 
@@ -20,7 +23,7 @@
 |---|---|
 | Model | `EleutherAI/gpt-neo-125m`; the same pretrained model is the reference p_ref |
 | Training | members' `train` docs; AdamW, lr 5e-5, batch 8, linear decay to 0, no warmup, no weight decay |
-| Epochs | **all 10 epochs are run**; the epoch with the lowest **member validation** loss is scored (Kandpal) |
+| Epochs | Every epoch is run, and the epoch with the lowest **member validation** loss is scored (Kandpal). Seed-0 pilot: 10 epochs, best at epoch 2. **From now on: 4 epochs** (user decision, 2026-11-24) |
 | Precision | fp16 mixed precision (the T4 has no bf16); scoring in fp32 |
 | Document | `[EOS] + first 128 tokens`; EOS is only a start marker, so all 128 text tokens are scored |
 | Score | s(x) = log p_θ(x) − log p_ref(x), summed over the text tokens |

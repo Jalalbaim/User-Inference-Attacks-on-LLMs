@@ -25,10 +25,12 @@ DIRTY="$(git -C "$REPO" status --porcelain 2>/dev/null | grep -qv '^??' && echo 
 PAYLOAD="$(mktemp)"
 trap 'rm -f "$PAYLOAD"' EXIT
 # Code only: no results, figures, caches or data dumps.
+# Stages 2+ reuse Stage 1's training and scoring code (Stage1/train_score.py, Stage1/lm.py).
+SHARED=""; [ "$N" -ge 2 ] && SHARED="Stage1"
 tar -C "$REPO" -czf "$PAYLOAD" \
     --exclude='__pycache__' --exclude='*.pyc' --exclude='results' --exclude='figs' \
-    --exclude='data/raw' --exclude='data/processed' \
-    common data kaggle "$STAGE" $( [ -d "$REPO/docs" ] && echo docs )
+    --exclude='data/raw' --exclude='data/processed' --exclude='*.ipynb' \
+    common data kaggle $SHARED "$STAGE" $( [ -d "$REPO/docs" ] && echo docs )
 
 {
     echo '#!/usr/bin/env bash'
