@@ -22,6 +22,10 @@ Every other seed, statistic and m is descriptive.
 - Blind baseline: TF-IDF (sublinear, min_df = 2) + logistic regression on the subset's text, fit on FIT and evaluated on EVAL.
 - T̂ and S_cat are certified on all users; the learned statistics only on EVAL users. FIT/EVAL is used only for fitting.
 
+## Added after the results (user, 2026-11-25)
+- **User-bootstrap CIs** (plan row 2): `analysis.bootstrap_vs_T`, B = 1000. Each replicate resamples the users once and reuses that resample for every seed, m, draw and statistic. For the aggregator and blind baseline, the FIT fit is held fixed. Notebook section 4b.
+- **EXPLORATORY, not pre-registered:** eq. (3) on transformed scores (`slog` = sign·log1p|s|, `int` = rank-inverse-normal). This was added because eq. (3) on raw s fails, since s is heavy-tailed. Notebook section 5b.
+
 ## Files
 
 | File | What it is |
@@ -40,7 +44,7 @@ Notebook settings: **Accelerator: GPU T4**, **Internet: on**. Run the commands i
 !bash run_kaggle.sh S2 SEEDS="5 6 7 8 9" S2_NULL_SEEDS=  # session B: seeds 5-9 (a new session)
 ```
 - **Smoke run (~15–20 min):** 4 users per class and 60 steps. It prints the measured training estimate (`SMOKE speed ...`) and the S_cat estimate (`S_cat SMOKE: ... min per model`).
-- **Outputs:** `/kaggle/working/outputs/S2_<time>.tar.gz`. Download it and extract it into `Stage2/results/`; the weights are not needed.
+- **Outputs:** `/kaggle/working/outputs/S2_<time>.zip`: the run outputs plus the per-seed score and S_cat tables from `ckpt/`, without model weights. Download it and extract it into `Stage2/results/<session>/`.
 - **Checkpoints:** `ckpt/S2/<run>_s<seed>/`. `best/` is kept in fp32, so S_cat uses the exact weights behind the score table: about 500 MB per model, about 3 GB per session.
 - **Time limit:** the script stops itself before the budget runs out (exit 75). To resume: Save Version, attach the output as an input, and rerun the same command. Finished seeds and S_cat tables are skipped.
 

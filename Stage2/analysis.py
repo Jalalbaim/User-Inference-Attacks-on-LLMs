@@ -177,6 +177,62 @@ def paired_vs_T(per_seed, users="EVAL"):
     return pd.DataFrame(rows)
 
 
+# ---------------------------------------------------------------- user bootstrap (plan row 2: user-bootstrap CIs)
+def user_values(sc, cat, runs_seeds=None, texts=None, blind=True):
+    """Per-user statistic values per (run, seed, m, draw): columns user, b, half, T, S_cat, Agg, Blind."""
+    if runs_seeds is None:
+        runs_seeds = sorted(set(map(tuple, cat[["run", "seed"]].drop_duplicates().to_numpy())))
+    out = []
+    for run, seed in runs_seeds:
+        for (m, dr), t in user_tables(sc, cat, run, seed, texts).items():
+            t = add_learned(t, blind=blind and texts is not None)
+            cols = ["b", "half"] + [s for s in STATS if s in t]
+            out.append(t[cols].rename_axis("user").reset_index().assign(run=run, seed=int(seed), m=m, draw=dr))
+    return pd.concat(out, ignore_index=True)
+
+
+def _boot_auroc(s, b, W):
+    """AUROC for every bootstrap weight row of W (B x n users); ties count 1/2."""
+    i1, i0 = np.flatnonzero(b == 1), np.flatnonzero(b == 0)
+    P = (s[i1][:, None] > s[i0][None, :]) + 0.5 * (s[i1][:, None] == s[i0][None, :])
+    w1, w0 = W[:, i1], W[:, i0]
+    return np.einsum("bi,ij,bj->b", w1, P, w0) / (w1.sum(1) * w0.sum(1))
+
+
+def bootstrap_vs_T(uv, run="main", B=1000, seed=0):
+    """95% user-bootstrap CIs (percentile) for the seed- and draw-averaged AUROC of each statistic and for its
+    difference with T-hat, per m and user group. One user resample per replicate, shared by every seed, m, draw and
+    statistic (users are what all seeds share). Learned statistics are held fixed (conditional on the FIT fit)."""
+    u = uv[uv.run == run]
+    users = np.array(sorted(u.user.unique()))
+    W = np.random.default_rng(seed).multinomial(len(users), np.full(len(users), 1 / len(users)), size=B).astype(float)
+    pos = {x: i for i, x in enumerate(users)}
+    acc = {}   # (users, m, stat) -> list of (point, B-vector)
+    for (sd, m, dr), g in u.groupby(["seed", "m", "draw"]):
+        for grp in ("all", "EVAL"):
+            x = g if grp == "all" else g[g.half == "EVAL"]
+            idx = x.user.map(pos).to_numpy()
+            b = x.b.to_numpy()
+            for st in STATS:
+                if st not in x or x[st].isna().any() or (grp == "all" and st in ("Agg", "Blind")):
+                    continue
+                s = x[st].to_numpy(float)
+                acc.setdefault((grp, m, st), {}).setdefault(sd, []).append(
+                    (C.auroc(s[b == 1], s[b == 0]), _boot_auroc(s, b, W[:, idx])))
+    # mean over draws within seed, then over seeds
+    est = {k: (np.mean([np.mean([p for p, _ in v]) for v in d.values()]),
+               np.mean([np.mean([r for _, r in v], axis=0) for v in d.values()], axis=0)) for k, d in acc.items()}
+    rows = []
+    for (grp, m, st), (p, r) in sorted(est.items()):
+        row = {"users": grp, "m": m, "stat": st, "auroc": p, "auroc_lo": np.quantile(r, .025), "auroc_hi": np.quantile(r, .975)}
+        if st != "T" and (grp, m, "T") in est:
+            pt, rt = est[(grp, m, "T")]
+            dlt = r - rt
+            row.update(diff=p - pt, diff_lo=np.quantile(dlt, .025), diff_hi=np.quantile(dlt, .975), p_gt0=(dlt > 0).mean())
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 # ---------------------------------------------------------------- headline (pre-registered)
 def headline(sc, h=HEADLINE):
     d = sc[(sc.run == h["run"]) & (sc.seed == h["seed"])]
@@ -189,12 +245,29 @@ def headline(sc, h=HEADLINE):
 
 
 # ---------------------------------------------------------------- Step F: variance decomposition (Prop. 6)
-def variance_decomposition(sc, run="main", seed=0, m_grid=DR.M_GRID):
-    """Per class: v_W (mean within-user variance of s), v_B (between-user variance of tau minus sampling noise,
-    clipped at 0), Delta; predicted AUROC(m) = Phi(Delta / sqrt(vB1 + vB0 + (vW1 + vW0)/m)) and the ceiling."""
+TRANSFORMS = (None, "slog", "int")
+
+
+def _scores(sc, run, seed, transform=None):
+    """Score rows of one model (EVAL users only for the null), with s optionally transformed per document:
+    'slog' = sign(s) log(1 + |s|); 'int' = rank-inverse-normal over all documents of the model.
+    The transformed variants are EXPLORATORY (added 2026-11-25 after eq. (3) failed on raw s; not pre-registered)."""
     d = sc[(sc.run == run) & (sc.seed == seed)]
     if run == "null":
         d = d[d.half == "EVAL"]
+    if transform == "slog":
+        d = d.assign(s=np.sign(d.s) * np.log1p(np.abs(d.s)))
+    elif transform == "int":
+        d = d.assign(s=norm.ppf((d.s.rank(method="average") - 0.5) / len(d)))
+    elif transform is not None:
+        raise ValueError(transform)
+    return d
+
+
+def variance_decomposition(sc, run="main", seed=0, m_grid=DR.M_GRID, transform=None):
+    """Per class: v_W (mean within-user variance of s), v_B (between-user variance of tau minus sampling noise,
+    clipped at 0), Delta; predicted AUROC(m) = Phi(Delta / sqrt(vB1 + vB0 + (vW1 + vW0)/m)) and the ceiling."""
+    d = _scores(sc, run, seed, transform)
     u = d.groupby("user").agg(b=("b", "first"), tau=("s", "mean"), vw=("s", lambda x: x.var(ddof=1)), k=("s", "size"))
     par = {}
     for b in (0, 1):
@@ -206,16 +279,15 @@ def variance_decomposition(sc, run="main", seed=0, m_grid=DR.M_GRID):
     vb, vw = par[1]["v_B"] + par[0]["v_B"], par[1]["v_W"] + par[0]["v_W"]
     pred = {m: float(norm.cdf(delta / np.sqrt(vb + vw / m))) for m in m_grid}
     ceiling = float(norm.cdf(delta / np.sqrt(vb))) if vb > 0 else 1.0
-    return {"run": run, "seed": seed, "delta": delta, "v_B1": par[1]["v_B"], "v_B0": par[0]["v_B"],
+    return {"run": run, "seed": seed, "transform": transform or "raw", "delta": delta, "v_B1": par[1]["v_B"], "v_B0": par[0]["v_B"],
             "v_W1": par[1]["v_W"], "v_W0": par[0]["v_W"], "pred": pred, "ceiling": ceiling,
             "share_between_at_m32": vb / (vb + vw / 32) if vb + vw > 0 else float("nan")}
 
 
-def measured_T_auroc(sc, run="main", seed=0, R=200, m_grid=DR.M_GRID, rng_seed=0):
-    """T-hat AUROC per m averaged over R random subsets (as in Stage 1), for comparison with the prediction."""
-    d = sc[(sc.run == run) & (sc.seed == seed)]
-    if run == "null":
-        d = d[d.half == "EVAL"]
+def measured_T_auroc(sc, run="main", seed=0, R=200, m_grid=DR.M_GRID, rng_seed=0, transform=None):
+    """AUROC of the mean (transformed) score per m, averaged over R random subsets (as in Stage 1), for comparison
+    with the prediction made on the SAME transformed scores."""
+    d = _scores(sc, run, seed, transform)
     rng = np.random.default_rng(rng_seed)
     g = {u: x.s.to_numpy() for u, x in d.groupby("user")}
     lab = d.groupby("user").b.first()

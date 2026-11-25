@@ -45,7 +45,7 @@ Notebook settings: **Accelerator: GPU T4**, **Internet: on**.
 - **Smoke run (~10 min):** 6 users, 60 steps × 2 epochs. Its log prints the measured speed and a full-run estimate
   (`SMOKE speed ... -> full run ... about X h`). Its checkpoints go to `ckpt/S1/smoke/`, apart from real runs.
 - **Outputs:** `/kaggle/working/outputs/S1_<time>/` holds `scores.csv.gz` (the Step-C table), `history_<run>_s<seed>.json`,
-  `run.log` and `manifest.json`, and there is a `.tar.gz` of the same folder. Download the `.tar.gz` and extract it into `Stage1/results/`.
+  `run.log` and `manifest.json`, and there is a `.zip` of the same folder (plus the per-seed tables from `ckpt/`, no weights). Download the `.zip` and extract it into `Stage1/results/`.
 - **Checkpoints:** `/kaggle/working/ckpt/S1/<run>_s<seed>/`.
   - `last.pt` is written after every epoch and deleted when the seed finishes.
   - `best/` keeps the best-epoch weights, saved in fp16 at the end (about 250 MB per seed; Stage 2 needs them).

@@ -33,15 +33,34 @@ print(json.dumps({
 }, indent=2))
 __UIA_PY__
 
-# ---------- archive (one file to download), checkpoints stay separate ----------
-( cd "$UIA_WORK/outputs" && tar -czf "$UIA_RUN_TAG.tar.gz" "$UIA_RUN_TAG" ) || true
+# ---------- archive: one .zip to download = outputs + the small per-seed tables in ckpt (no model weights) ----------
+UIA_ZIP="$UIA_WORK/outputs/$UIA_RUN_TAG.zip"
+"$PYTHON" - "$UIA_WORK/outputs" "$UIA_RUN_TAG" "${UIA_CKPT_DIR:-}" "$UIA_ZIP" <<'__UIA_ZIP__' 2>&1 | tee -a "$UIA_LOG" || true
+import os, sys, zipfile
+outs, tag, ckpt, dst = sys.argv[1:5]
+WEIGHTS = (".safetensors", ".bin", ".pt", ".pth", ".ckpt")
+n = 0
+with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
+    for top, arc in [(os.path.join(outs, tag), os.path.join("outputs", tag)), (ckpt, "ckpt")]:
+        if not top or not os.path.isdir(top):
+            continue
+        for d, dirs, files in os.walk(top):
+            dirs[:] = [x for x in dirs if x != "best"]          # model weights + tokenizer files
+            for f in files:
+                if f.endswith(WEIGHTS):
+                    continue
+                p = os.path.join(d, f)
+                z.write(p, os.path.join(arc, os.path.relpath(p, top)))
+                n += 1
+print(f" zip: {n} files, {os.path.getsize(dst) / 1e6:.1f} MB -> {dst}")
+__UIA_ZIP__
 
 {
 echo "=================================================================="
 echo " ${UIA_ID} finished: ${UIA_STATUS} (exit ${UIA_RC}) after $(( UIA_RUNTIME / 3600 ))h$(( UIA_RUNTIME % 3600 / 60 ))m$(( UIA_RUNTIME % 60 ))s"
 echo " per-document score table: ${UIA_SCORE_STATUS}"
 echo " outputs: ${UIA_OUT_DIR}"
-echo " archive: ${UIA_WORK}/outputs/${UIA_RUN_TAG}.tar.gz"
+echo " archive (download this): ${UIA_ZIP}"
 [ "$UIA_STATUS" = time_budget_reached ] && \
 echo " budget reached: checkpoints in ${UIA_CKPT_DIR}; Save Version, attach the output, rerun the same command to resume."
 [ "$UIA_ON_KAGGLE" = 1 ] && \
