@@ -16,12 +16,19 @@ Checkpoints (resume across Kaggle sessions): <ckpt>/<run>_s<seed>/
   scores.csv.gz   the per-document score table of this run/seed; DONE marks a finished seed
 Reference scores (pretrained model, seed-independent) are cached in <ckpt>/ref_scores_<len>.csv.gz.
 
-    python train_score.py --seeds 0 --run main --out OUT --ckpt CKPT [--smoke]
+Caps (Stage 4b, plan Step G.6): --caps "10 25 50 100" trains, for every seed, one model per cap c on at most c train
+docs per member user (same members as the main run of that seed). The c docs are the first c of a fixed per-user
+permutation (independent of seed and cap), so the cap subsets are nested and identical across seeds.
+Checkpoint dir and score-table run label: cap<c>_s<seed> / run = "cap<c>"; k_u = min(n_train, c) for those tables,
+k_u_full = n_train. --caps 0 (default) = no cap = the Stage 1/2 behaviour, unchanged.
+
+    python train_score.py --seeds 0 --run main --out OUT --ckpt CKPT [--caps "10 25"] [--smoke]
 """
 from __future__ import annotations
 
 import argparse
 import json
+import zlib
 import os
 import random
 import shutil
@@ -73,23 +80,46 @@ def deadline_left():
     return float(d) - time.time() if d else float("inf")
 
 
-def run_seed(a, seed, docs, users, tok, device, ref_cache):
-    tag = f"{a.run}_s{seed}"
+def apply_cap(train, cap):
+    """At most `cap` train docs per user: the first `cap` of a fixed per-user permutation of the user's docs (sorted by
+    doc_id). The permutation depends only on the user, so cap subsets are nested and identical across seeds.
+    cap = 0: no cap. The original document order of `train` is kept."""
+    if not cap:
+        return train
+    by_user = {}
+    for d in train:
+        by_user.setdefault(d["user"], []).append(d["doc_id"])
+    keep = set()
+    for u, ids in by_user.items():
+        ids = sorted(ids)
+        perm = np.random.default_rng([zlib.crc32(u.encode("utf-8")), 4242]).permutation(len(ids))
+        keep.update(ids[i] for i in perm[:cap])
+    return [d for d in train if d["doc_id"] in keep]
+
+
+def run_seed(a, seed, docs, users, tok, device, ref_cache, cap=0):
+    label = a.run if not cap else f"cap{cap}"
+    tag = f"{label}_s{seed}"
     cdir = os.path.join(a.ckpt, tag)
     os.makedirs(cdir, exist_ok=True)
     done = os.path.join(cdir, "DONE")
     if os.path.exists(done):
         log(f"{tag}: already done, reusing its score table")
-        return pd.read_csv(os.path.join(cdir, "scores.csv.gz"))
+        return pd.read_csv(os.path.join(cdir, "scores.csv.gz"), keep_default_na=False, na_values=[""])
 
     mem = members(users, seed, a.run)
-    full_train = sum(1 for d in docs if d["role"] == "train" and d["user"] in mem)
+    full_train = len(apply_cap([d for d in docs if d["role"] == "train" and d["user"] in mem], cap))
     if a.smoke:   # a few users, a few docs each: exercises every code path in minutes
         rng = random.Random(seed)
         keep = set(rng.sample(sorted(mem), a.smoke_users)) | set(rng.sample(sorted(set(users) - mem), a.smoke_users))
         docs = [d for d in docs if d["user"] in keep]
         mem = mem & keep
-    train = [d for d in docs if d["role"] == "train" and d["user"] in mem]
+    train = apply_cap([d for d in docs if d["role"] == "train" and d["user"] in mem], cap)
+    if cap:
+        per_user = pd.Series([d["user"] for d in train]).value_counts()
+        assert per_user.max() <= cap, (per_user.max(), cap)
+        log(f"{tag}: cap {cap} docs per member -> {len(train)} train docs (per user min {per_user.min()}, "
+            f"max {per_user.max()})")
     if a.smoke:
         train = train[:a.smoke_train_docs]
     val_in = [d for d in docs if d["role"] == "val" and d["user"] in mem]
@@ -194,27 +224,31 @@ def run_seed(a, seed, docs, users, tok, device, ref_cache):
     lp_r = ref.loc[ids, "logp_ref"].to_numpy()
     assert (ref.loc[ids, "n_tokens"].to_numpy() == nt).all()
 
-    k = {u: users[u]["n_train"] for u in users}
+    k_full = {u: users[u]["n_train"] for u in users}
+    k = {u: min(n, cap) if cap else n for u, n in k_full.items()}   # train docs the user has (would have) under the cap
     ktot = sum(k[u] for u in mem)
     df = pd.DataFrame({
-        "run": a.run, "seed": seed, "doc_id": ids, "user": [d["user"] for d in held],
+        "run": label, "seed": seed, "cap": cap, "doc_id": ids, "user": [d["user"] for d in held],
         "b": [users[d["user"]][f"b_s{seed}"] for d in held],
         "trained": [int(d["user"] in mem) for d in held],
         "half": [users[d["user"]]["half"] for d in held],
         "k_u": [k[d["user"]] for d in held],
+        "k_u_full": [k_full[d["user"]] for d in held],
         "alpha_u": [k[d["user"]] / ktot if d["user"] in mem else 0.0 for d in held],
         "date": [d["date"] for d in held], "n_tokens": nt,
         "logp_theta": lp_t, "logp_ref": lp_r, "s": lp_t - lp_r,
         "best_epoch": best["epoch"], "model": a.model if not a.tiny else "tiny-random", "max_len": a.max_len,
     })
     df.to_csv(os.path.join(cdir, "scores.csv.gz"), index=False)
-    json.dump({"hist": hist, "best": best, "n_members": len(mem), "n_train_docs": len(train),
+    json.dump({"hist": hist, "best": best, "n_members": len(mem), "n_train_docs": len(train), "cap": cap,
                "args": vars(a)}, open(os.path.join(cdir, "history.json"), "w"), indent=1)
 
-    # keep only what later stages need: best weights in fp16; drop the optimizer state
+    # keep only what later stages need: best weights in fp16 (or none); drop the optimizer state
     if not a.keep_last:
         os.remove(last)
-    if device.type == "cuda" and not a.tiny and not a.keep_fp32:
+    if a.drop_weights:
+        shutil.rmtree(os.path.join(cdir, "best"), ignore_errors=True)
+    elif device.type == "cuda" and not a.tiny and not a.keep_fp32:
         model.half().save_pretrained(os.path.join(cdir, "best"))
     open(done, "w").write(time.strftime("%Y-%m-%dT%H:%M:%S"))
     gap = df.groupby("trained").s.mean()
@@ -240,6 +274,9 @@ def main():
     ap.add_argument("--keep-last", action="store_true", help="keep last.pt (optimizer) after a seed finishes")
     ap.add_argument("--keep-fp32", action="store_true",
                     help="keep best/ in fp32 (Stage 2: S_cat must use the exact weights that produced the score table)")
+    ap.add_argument("--caps", default="0", help='Stage 4b: space-separated caps per user, e.g. "10 25 50 100"; 0 = no cap')
+    ap.add_argument("--drop-weights", action="store_true",
+                    help="delete best/ once the score table is written (Stage 4b: weights are not reused)")
     ap.add_argument("--smoke", action="store_true", help="6 users, few docs and steps; prints a runtime estimate")
     ap.add_argument("--smoke-steps", type=int, default=60)
     ap.add_argument("--smoke-users", type=int, default=3, help="smoke: users per class")
@@ -280,12 +317,18 @@ def main():
         r.to_csv(p)
         return r
 
+    caps = [int(x) for x in a.caps.split()] or [0]
+    if any(c < 0 for c in caps) or (len(caps) > 1 and 0 in caps):
+        raise SystemExit(f"--caps: positive caps, or the single value 0 (got {a.caps!r})")
+    if caps != [0] and a.run != "main":
+        raise SystemExit("--caps is only defined for --run main")
     frames = []
-    for s in [int(x) for x in a.seeds.split()]:
-        frames.append(run_seed(a, s, docs, users, tok, device, ref_cache))
-        pd.concat(frames).to_csv(os.path.join(a.out, "scores.csv.gz"), index=False)   # updated after each seed
-        cdir = os.path.join(a.ckpt, f"{a.run}_s{s}")
-        shutil.copy(os.path.join(cdir, "history.json"), os.path.join(a.out, f"history_{a.run}_s{s}.json"))
+    for s in [int(x) for x in a.seeds.split()]:          # seed-major: a partial run has every cap for its seeds
+        for c in caps:
+            frames.append(run_seed(a, s, docs, users, tok, device, ref_cache, cap=c))
+            pd.concat(frames).to_csv(os.path.join(a.out, "scores.csv.gz"), index=False)   # updated after each model
+            tag = f"{a.run if not c else f'cap{c}'}_s{s}"
+            shutil.copy(os.path.join(a.ckpt, tag, "history.json"), os.path.join(a.out, f"history_{tag}.json"))
     log(f"all seeds done: {os.path.join(a.out, 'scores.csv.gz')}")
 
 

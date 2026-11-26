@@ -1,5 +1,7 @@
 # Stage 2: core C3 (T̂ vs S_cat vs aggregator vs blind baseline)
 
+**Status: CLOSED (2026-11-25).** Headline (seed 1): AUROC 0.851 [0.794, 0.902], DKW certificate **+0.271**. S_cat and the aggregator do not beat T̂ in any useful way (falsifier 2). Eq. (3) under-predicts (falsifier 3). Null and blind baseline are clean. Details are in the notes cell of `stage2.ipynb`.
+
 **Plan:** `docs/experiment_plan_enron_gptneo125m.md`, section 4 row 2 (Steps D–F). Needs a GPU (Kaggle T4).
 **Falsifiers (plan section 4):**
 1. T̂ keeps rising with m, with no ceiling.

@@ -67,7 +67,7 @@ def user_tables(sc, cat, run, seed, texts=None):
     """{(m, draw): DataFrame indexed by user with b, half, T, S_cat, 11 features, text}."""
     d = sc[(sc.run == run) & (sc.seed == seed)].set_index("doc_id")
     c = cat[(cat.run == run) & (cat.seed == seed)]
-    lab = d.groupby("user")[["b", "half", "trained", "k_u"]].first()
+    lab = d.groupby("user")[["b", "half", "trained", "k_u", "alpha_u"]].first()
     out = {}
     for (m, dr), g in c.groupby(["m", "draw"]):
         scat = g.groupby("user").s_cat.mean()
@@ -186,9 +186,22 @@ def user_values(sc, cat, runs_seeds=None, texts=None, blind=True):
     for run, seed in runs_seeds:
         for (m, dr), t in user_tables(sc, cat, run, seed, texts).items():
             t = add_learned(t, blind=blind and texts is not None)
-            cols = ["b", "half"] + [s for s in STATS if s in t]
+            cols = ["b", "half", "k_u", "alpha_u"] + [s for s in STATS if s in t]
             out.append(t[cols].rename_axis("user").reset_index().assign(run=run, seed=int(seed), m=m, draw=dr))
     return pd.concat(out, ignore_index=True)
+
+
+def cached_user_values(results_dir=None, with_blind=False):
+    """user_values for every model under Stage2/results, cached as <results>/_user_values[_blind].csv.gz.
+    Used by the post-processing stages (3, 4a, 6). Delete the cache after adding new result archives."""
+    results_dir = results_dir or os.path.join(HERE, "results")
+    path = os.path.join(results_dir, "_user_values_blind.csv.gz" if with_blind else "_user_values.csv.gz")
+    if os.path.exists(path):
+        return _read(path)
+    sc, cat, _ = load(results_dir)
+    uv = user_values(sc, cat, texts=load_texts()[0] if with_blind else None, blind=with_blind)
+    uv.to_csv(path, index=False)
+    return uv
 
 
 def _boot_auroc(s, b, W):
