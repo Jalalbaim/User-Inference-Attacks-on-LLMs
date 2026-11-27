@@ -33,39 +33,51 @@ print(json.dumps({
 }, indent=2))
 __UIA_PY__
 
-# ---------- archive: one .zip to download = outputs + the small per-seed tables in ckpt (no model weights) ----------
+# ---------- summary (written BEFORE the zip, so the zipped run.log is complete) ----------
 UIA_ZIP="$UIA_WORK/outputs/$UIA_RUN_TAG.zip"
-"$PYTHON" - "$UIA_WORK/outputs" "$UIA_RUN_TAG" "${UIA_CKPT_DIR:-}" "$UIA_ZIP" <<'__UIA_ZIP__' 2>&1 | tee -a "$UIA_LOG" || true
-import os, sys, zipfile
-outs, tag, ckpt, dst = sys.argv[1:5]
-WEIGHTS = (".safetensors", ".bin", ".pt", ".pth", ".ckpt")
-n = 0
-with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
-    for top, arc in [(os.path.join(outs, tag), os.path.join("outputs", tag)), (ckpt, "ckpt")]:
-        if not top or not os.path.isdir(top):
-            continue
-        for d, dirs, files in os.walk(top):
-            dirs[:] = [x for x in dirs if x != "best"]          # model weights + tokenizer files
-            for f in files:
-                if f.endswith(WEIGHTS):
-                    continue
-                p = os.path.join(d, f)
-                z.write(p, os.path.join(arc, os.path.relpath(p, top)))
-                n += 1
-print(f" zip: {n} files, {os.path.getsize(dst) / 1e6:.1f} MB -> {dst}")
-__UIA_ZIP__
-
 {
 echo "=================================================================="
 echo " ${UIA_ID} finished: ${UIA_STATUS} (exit ${UIA_RC}) after $(( UIA_RUNTIME / 3600 ))h$(( UIA_RUNTIME % 3600 / 60 ))m$(( UIA_RUNTIME % 60 ))s"
 echo " per-document score table: ${UIA_SCORE_STATUS}"
 echo " outputs: ${UIA_OUT_DIR}"
-echo " archive (download this): ${UIA_ZIP}"
-[ "$UIA_STATUS" = time_budget_reached ] && \
-echo " budget reached: checkpoints in ${UIA_CKPT_DIR}; Save Version, attach the output, rerun the same command to resume."
-[ "$UIA_ON_KAGGLE" = 1 ] && \
-echo " Kaggle: /kaggle/working is kept only if you 'Save Version' (or download the archive now)."
+[ "$UIA_STATUS" = time_budget_reached ] && echo " budget reached: checkpoints in ${UIA_CKPT_DIR}; Save Version, attach the output, rerun the same command to resume."
 _used=$(du -sm "$UIA_WORK" 2>/dev/null | cut -f1 || echo 0)
 [ "${_used:-0}" -gt 15000 ] && echo " WARNING: ${UIA_WORK} uses ${_used} MB (Kaggle output limit ~20 GB)."
+} | tee -a "$UIA_LOG"
+
+# ---------- archive: ONE .zip with every output of this experiment id ----------
+#   outputs/<ID>_*/   every run folder of this id on this machine (this run, earlier runs, smoke runs)
+#   ckpt/<ID>/        everything: score tables, histories, DONE markers, reference scores, resume state
+# Model weights (.safetensors/.bin/.pt/...) are included only with ZIP_WEIGHTS=1; otherwise they are listed as skipped.
+"$PYTHON" - "$UIA_WORK/outputs" "$UIA_ID" "${UIA_CKPT_DIR:-}" "$UIA_ZIP" "${ZIP_WEIGHTS:-0}" <<'__UIA_ZIP__' 2>&1 | tee -a "$UIA_LOG" || true
+import glob, os, sys, zipfile
+outs, uid, ckpt, dst, zw = sys.argv[1:6]
+WEIGHTS = (".safetensors", ".bin", ".pt", ".pth", ".ckpt")
+tops = [(d, os.path.join("outputs", os.path.basename(d))) for d in sorted(glob.glob(os.path.join(outs, uid + "_*")))
+        if os.path.isdir(d)]
+if ckpt and os.path.isdir(ckpt):
+    tops.append((ckpt, os.path.join("ckpt", uid)))
+n, skipped, skipped_mb = 0, 0, 0.0
+tmp = dst + ".part"
+with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as z:
+    for top, arc in tops:
+        for d, dirs, files in os.walk(top):
+            for f in sorted(files):
+                p = os.path.join(d, f)
+                if f.endswith(WEIGHTS) and zw != "1":
+                    skipped += 1
+                    skipped_mb += os.path.getsize(p) / 1e6
+                    continue
+                z.write(p, os.path.join(arc, os.path.relpath(p, top)))
+                n += 1
+os.replace(tmp, dst)
+print(f" zip: {n} files from {len(tops)} folders, {os.path.getsize(dst) / 1e6:.1f} MB -> {dst}")
+if skipped:
+    print(f" zip: {skipped} model-weight files ({skipped_mb:.0f} MB) NOT included; rerun the footer with ZIP_WEIGHTS=1 to include them")
+__UIA_ZIP__
+
+{
+echo " archive (download this): ${UIA_ZIP}"
+[ "$UIA_ON_KAGGLE" = 1 ] && echo " Kaggle: /kaggle/working is kept only if you 'Save Version' (or download the archive now)."
 echo "=================================================================="
 } | tee -a "$UIA_LOG"

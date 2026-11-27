@@ -1,6 +1,8 @@
 # Stage 4: light users and caps (Cor. 2)
 
-**Status:** 4a DONE (2026-11-25). 4b (cap retraining, GPU) is READY TO RUN on Kaggle (code tested locally 2026-11-26).
+**Status:** 4a DONE (2026-11-25). **4b DONE (2026-11-27).** Results are in `Stage4b/` (Kaggle run of 2026-11-26, 40 models, 5 h) and in `stage4.ipynb` section 4b.
+
+**4b result:** capping costs little and only below about 50 docs. T̂ (all users, m = 32): 0.839 uncapped vs 0.773 at c = 10 (paired Δ −0.066 [−0.093, −0.040]); at c ≥ 50 the CI contains 0. Aggregator ≈ T̂ at every cap, so the protection does not depend on the statistic. **A uniform cap does not create light users in Cor. 2's α_u sense:** α_u = 1/members ≈ 0.012 for everyone. Cor. 2's contrast is not supported in any regime tested. A real test needs mixed caps (some members capped, others not); not run, to discuss.
 
 **Plan:** `docs/experiment_plan_enron_gptneo125m.md`, section 4 row 4, Step G.
 
@@ -34,6 +36,8 @@
 ```
 - **Smoke run** (about 10 min): prints `SMOKE speed ... about X h of training` per cap.
 - **Full run:** about 25–35 min per seed for all 4 caps, about 5–6 h for 10 seeds (budget 11.5 h). If the budget runs out, the script stops itself (exit 75). Save Version, attach the output, and rerun the same command; finished models are skipped.
-- **Download:** `/kaggle/working/outputs/S4_<time>.zip` (score tables and histories, no weights). Extract it into `Stage4/results/`.
+- **Download:** `/kaggle/working/outputs/S4_<time>.zip` (score tables and histories, no weights). Extracted into `Stage4/stage4b/`: the score tables in `ckpt/S4/cap<c>_s<seed>/` are the input; `ckpt/S4/smoke/` is the smoke run and is ignored.
+
+**4b analysis code** (`analysis.py`): `load_caps`, `cap_user_values` (cached in `Stage4b/_user_values_caps.csv.gz`), `with_uncapped`, `cap_metrics`, `cap_summary`, `paired_cap_bootstrap`, `load_cap_histories`. Checked: labels identical to Stage 2, k_u = c for members, and Stage 2's seed 0 recomputed through this path matches exactly.
 
 **Local test (2026-11-26):** `run_kaggle.sh S4 S4_SMOKE=1 S4_TINY=1 SEEDS="0 1"` exited 0 with the zip and no weights. A rerun skipped all 8 finished models. On the real splits, every cap gives exactly members × c docs, nested and identical across seeds. The uncapped path (Stage 2 behaviour) is unchanged.
